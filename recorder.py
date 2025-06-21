@@ -14,13 +14,14 @@ import sounddevice as sd
 import numpy as np
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QPushButton,
-    QLabel, QWidget, QListWidget, QMessageBox, QFileDialog
+    QLabel, QWidget, QListWidget, QMessageBox, QFileDialog, QTextEdit
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QKeySequence, QFontDatabase, QFont, QAction
 import wave
 import csv
 from datetime import datetime
+from PyQt6.QtWidgets import QSizePolicy
 
 class SpeechRecorder(QMainWindow):
     def __init__(self, args):
@@ -87,11 +88,42 @@ class SpeechRecorder(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout()
         
-        # Prompt Display
-        self.prompt_label = QLabel("Press 'Start Recording' to begin")
-        self.prompt_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.prompt_label.setStyleSheet("font-size: 18px; margin: 20px;")
-        self.prompt_label.setFont(self.app_font)
+        # Set layout size constraint to allow proper resizing
+        self.layout.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
+        
+        # Improved Prompt Display using QTextEdit for better text handling
+        self.prompt_display = QTextEdit()
+        self.prompt_display.setPlainText("Press 'Start Recording' to begin")
+        self.prompt_display.setReadOnly(True)  # Make it read-only
+        self.prompt_display.setFont(self.app_font)
+        
+        # Style the prompt display
+        self.prompt_display.setStyleSheet("""
+            QTextEdit {
+                font-size: 18px; 
+                margin: 10px; 
+                padding: 15px; 
+                border: 2px solid #ddd; 
+                border-radius: 8px;
+                background-color: #f9f9f9;
+                color: #333;
+                line-height: 1.4;
+            }
+        """)
+        
+        # Set size policy and minimum height
+        self.prompt_display.setSizePolicy(
+            QSizePolicy.Policy.Expanding, 
+            QSizePolicy.Policy.Preferred
+        )
+        self.prompt_display.setMinimumHeight(120)
+        self.prompt_display.setMaximumHeight(200)
+        
+        # Enable word wrapping
+        self.prompt_display.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        
+        # Center align text
+        self.prompt_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Buttons
         self.record_button = QPushButton("Start Recording (Space)")
@@ -115,14 +147,14 @@ class SpeechRecorder(QMainWindow):
         self.status_bar = self.statusBar()
         self.update_status(f"Ready | Output Directory: {os.path.abspath(self.args.save_dir)}")
         
-        # Layout
+        # Layout assembly
         button_layout = QVBoxLayout()
-        for btn in [self.record_button, self.play_button, 
-                   self.save_button, self.next_button, self.delete_button]:
+        for btn in [self.record_button, self.play_button,
+                self.save_button, self.next_button, self.delete_button]:
             btn.setMinimumHeight(40)
             button_layout.addWidget(btn)
-        
-        self.layout.addWidget(self.prompt_label)
+
+        self.layout.addWidget(self.prompt_display) 
         self.layout.addLayout(button_layout)
         self.layout.addWidget(self.recordings_list)
         self.central_widget.setLayout(self.layout)
@@ -184,7 +216,7 @@ class SpeechRecorder(QMainWindow):
         else:  # random
             self.current_prompt = random.choice(self.prompts)
             
-        self.prompt_label.setText(self.current_prompt)
+        self.prompt_display.setPlainText(self.current_prompt)
         self.update_status("Prompt ready - Press Space to record")
 
     def toggle_recording(self):
@@ -199,6 +231,20 @@ class SpeechRecorder(QMainWindow):
             self.record_button.setText("Stop Recording (Space)")
             self.update_status("Recording...")
             
+            # Change prompt display style to indicate recording
+            self.prompt_display.setStyleSheet("""
+                QTextEdit {
+                    font-size: 18px; 
+                    margin: 10px; 
+                    padding: 15px; 
+                    border: 2px solid #ff6b6b; 
+                    border-radius: 8px;
+                    background-color: #ffe6e6;
+                    color: #333;
+                    line-height: 1.4;
+                }
+            """)
+            
             self.stream = sd.InputStream(
                 samplerate=self.sample_rate,
                 channels=self.channels,
@@ -212,6 +258,21 @@ class SpeechRecorder(QMainWindow):
             self.record_button.setText("Start Recording (Space)")
             self.stream.stop()
             self.stream.close()
+            
+            # Reset prompt display style
+            self.prompt_display.setStyleSheet("""
+                QTextEdit {
+                    font-size: 18px; 
+                    margin: 10px; 
+                    padding: 15px; 
+                    border: 2px solid #ddd; 
+                    border-radius: 8px;
+                    background-color: #f9f9f9;
+                    color: #333;
+                    line-height: 1.4;
+                }
+            """)
+            
             self.update_status("Recording stopped - Press P to play or S to save")
 
     def audio_callback(self, indata, frames, time, status):
@@ -258,7 +319,9 @@ class SpeechRecorder(QMainWindow):
         
         # Update UI
         self.recordings.append(filename)
-        self.recordings_list.addItem(f"{timestamp}: {self.current_prompt[:50]}...")
+        # Truncate long prompts for display in list
+        display_prompt = self.current_prompt[:50] + "..." if len(self.current_prompt) > 50 else self.current_prompt
+        self.recordings_list.addItem(f"{timestamp}: {display_prompt}")
         self.update_status(f"Saved: {os.path.basename(filename)}")
         
         # Auto-next if configured
